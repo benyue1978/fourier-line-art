@@ -530,7 +530,7 @@ def render_video(
         ))
         relative_error = float(relative_errors[term_count] * 100)
         absolute_error = float(xy_errors[term_count])
-        formula_state.set_text(f"N = {term_count} / {data.term_count} 项　·　X、Y 同频成对增加")
+        formula_state.set_text(f"N = {term_count} / {data.term_count} 项")
         point_text.set_text(f"实时笔尖 ({x_norm:.2f}, {y_norm:.2f})")
         error_readout.set_text(f"{relative_error:.2f}%  ({absolute_error:.2f} px)")
         error_marker.set_data([term_count], [relative_error])
