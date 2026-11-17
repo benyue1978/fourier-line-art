@@ -16,9 +16,11 @@ dependencies = [
 
 [project.scripts]
 fourier-line-art = "fourier_line_art.cli:main"
+fourier-line-art-render = "fourier_line_art.rendering:main"
 
 [project.optional-dependencies]
 dev = ["pytest>=8,<9"]
+video = ["matplotlib>=3.8,<4"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
