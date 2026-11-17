@@ -83,12 +83,14 @@ are equally valid.
   be upgraded from their saved route samples.
 - Fourier display stages are unique, increasingly dense, and end at the full
   term count.
+- Pen-up trace opacity decreases monotonically with term count and is zero at
+  full precision; draw segments remain visible in blue.
 - With Matplotlib and FFmpeg installed, a low-resolution integration render
   produces a non-empty 9:16 MP4. Geometry tests verify fixed wheel centers,
   direct same-coordinate alignment, and vertical/horizontal projections from
   the actual wheel endpoints to the map point. Manual review checks first-term,
   middle, high-term, and final frames for clipping, wheel scale, ellipse
-  behavior, hidden pen-up travel, route alignment, and the error readout.
+  behavior, fading pen-up travel, route alignment, and the error readout.
 
 ## Running tests
 

@@ -10,6 +10,7 @@ from fourier_line_art.rendering import (
     RenderInputError,
     _chain_extent,
     _coordinate_guides,
+    _pen_up_alpha,
     _scene_bounds,
     load_render_data,
     render_video,
@@ -33,6 +34,17 @@ def test_stage_schedule_includes_full_precision_once(term_count, expected):
 def test_stage_schedule_rejects_invalid_term_count(term_count):
     with pytest.raises(ValueError):
         stage_schedule(term_count)
+
+
+def test_pen_up_path_fades_monotonically_to_zero():
+    alphas = [_pen_up_alpha(count, 256) for count in (1, 2, 8, 24, 64, 128, 192, 256)]
+
+    assert alphas[0] == pytest.approx(0.34)
+    assert alphas[-1] == 0
+    assert all(later < earlier for earlier, later in zip(alphas, alphas[1:]))
+    assert _pen_up_alpha(1, 1) == 0
+    with pytest.raises(ValueError, match="positive"):
+        _pen_up_alpha(0, 256)
 
 
 def _make_solver_result(tmp_path):

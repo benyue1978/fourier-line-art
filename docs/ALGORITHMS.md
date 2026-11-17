@@ -73,9 +73,9 @@ aligned with the map's y coordinates. Thus the X endpoint and map point have
 the exact same x value, while the Y endpoint and map point have the exact same
 y value. A vertical dashed line connects the X endpoint to the map point, and
 a horizontal dashed line connects the Y endpoint to that point. There are no
-coordinate offsets or bridge segments. Pen-up travel is omitted from the
-visible route at full precision; partial Fourier curves remain continuous at
-earlier stages.
+coordinate offsets or bridge segments. The route is split by its source draw
+mask: drawing segments stay blue, while lifted travel is a thin pale line whose
+opacity decreases with term count and reaches zero at full precision.
 
 Both coordinate chains use the same image-pixel-to-map scale, with X extent
 following the image width and Y extent following its height. Their centers are

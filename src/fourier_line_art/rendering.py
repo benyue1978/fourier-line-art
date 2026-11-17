@@ -166,6 +166,16 @@ def stage_schedule(term_count: int) -> tuple[int, ...]:
     return tuple(levels)
 
 
+def _pen_up_alpha(term_count: int, total_terms: int) -> float:
+    """Fade lifted travel smoothly to zero at the full Fourier reconstruction."""
+    if total_terms <= 1 or term_count >= total_terms:
+        return 0.0
+    if term_count < 1:
+        raise ValueError("term_count must be positive")
+    progress = (term_count - 1) / (total_terms - 1)
+    return 0.34 * (1.0 - progress) ** 0.7
+
+
 def _evaluate_axis(mean, frequencies, amplitudes, phases, times, count, *, sine=False):
     if count == 0:
         return np.full(times.shape, mean, dtype=np.float64)
@@ -376,6 +386,8 @@ def render_video(
                                 linewidth=0.9, edgecolor="#A8B9BD", zorder=1))
     (map_trace,) = main_ax.plot([], [], color="#087EA4", linewidth=2.4,
                                 solid_capstyle="round", zorder=3)
+    (lift_trace,) = main_ax.plot([], [], color="#6E9CA4", linewidth=1.45,
+                                 solid_capstyle="round", alpha=0.34, zorder=2.8)
     map_point = main_ax.scatter([], [], s=24, color="#087EA4", edgecolors="white",
                                 linewidths=0.5, zorder=6)
     # X's fixed horizontal output axis is above the map; Y's fixed vertical
@@ -445,7 +457,7 @@ def render_video(
     error_ax.set_ylabel("项数", fontsize=7, color="#607D8B")
     for spine in error_ax.spines.values():
         spine.set_visible(False)
-    fig.text(0.5, 0.035, "蓝色 = 当前描线　·　灰色 = 原图中心线　·　虚线 = 直接坐标投影",
+    fig.text(0.5, 0.035, "蓝色 = 落笔近似　·　浅色 = 提笔路径并随项数淡出　·　虚线 = 直接坐标投影",
              ha="center", va="center", fontsize=8, color="#667F89")
 
     def update_chain(chain, t, term_count):
@@ -490,11 +502,11 @@ def render_video(
         visible_end = max(1, int(progress * frame_count) + 1)
         partial_x, partial_y = x_curve[:visible_end] * map_scale, y_curve[:visible_end] * map_scale
         flags = draw_flags[:visible_end]
-        if term_count < data.term_count:
-            # Partial sums are continuous Fourier curves. At full precision,
-            # use the source lift mask to hide travel between separate strokes.
-            flags = np.ones_like(flags, dtype=bool)
         map_trace.set_data(np.where(flags, partial_x, np.nan), np.where(flags, partial_y, np.nan))
+        lift_alpha = _pen_up_alpha(term_count, data.term_count)
+        lift_trace.set_data(np.where(~flags, partial_x, np.nan), np.where(~flags, partial_y, np.nan))
+        lift_trace.set_alpha(lift_alpha)
+        lift_trace.set_visible(lift_alpha > 0)
 
         time_index = min(visible_end - 1, len(times) - 1)
         point_x, point_y = float(x_curve[time_index] * map_scale), float(y_curve[time_index] * map_scale)
@@ -522,7 +534,7 @@ def render_video(
         point_text.set_text(f"实时笔尖 ({x_norm:.2f}, {y_norm:.2f})")
         error_readout.set_text(f"{relative_error:.2f}%  ({absolute_error:.2f} px)")
         error_marker.set_data([term_count], [relative_error])
-        return [map_trace, map_point, x_axis, y_axis, x_guide, y_guide,
+        return [map_trace, lift_trace, map_point, x_axis, y_axis, x_guide, y_guide,
                 formula_state, point_text,
                 x_numeric_formula, y_numeric_formula,
                 error_readout, error_marker, x_label, y_label,

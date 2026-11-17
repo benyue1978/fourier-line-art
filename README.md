@@ -45,7 +45,7 @@ Open the MP4 in a desktop video player or copy it to a phone. The file uses H.26
 
 - **One combined diagram:** the X circle chain is above the source drawing, the Y chain is to its left, and the map shows the current blue reconstruction. Their fixed output axes share the map's coordinate frame: the X endpoint has exactly the map point's x coordinate, and the Y endpoint has exactly its y coordinate. Both use the same source-pixel scale.
 - **Formula card:** separate real Fourier formulas for `x_N(t)` and `y_N(t)`, plus the live normalized pen-tip coordinate and current term count `N`.
-- **Coordinate guides:** one dashed vertical line connects the X endpoint directly to the map pen tip; one dashed horizontal line connects the Y endpoint directly to the same point. There is no origin bridge or coordinate offset. Pen-up travel between strokes is hidden at full precision.
+- **Coordinate guides:** one dashed vertical line connects the X endpoint directly to the map pen tip; one dashed horizontal line connects the Y endpoint directly to the same point. There is no origin bridge or coordinate offset. Pen-up travel is shown as a faint solid trace that fades as terms are added, then disappears at full precision.
 - **Error graph:** relative XY RMS error versus term count. The readout gives both the relative error and the pixel-space RMS error for the current stage.
 
 The NPZ is also useful without rendering: it contains the source masks, sampled `(x, y, height)` route, draw-state mask, ordered Fourier frequencies and coefficients, RMS errors, and solver metadata. Inspect its metadata with:
