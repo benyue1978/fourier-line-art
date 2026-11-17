@@ -59,6 +59,19 @@ truncation has non-increasing sample RMS by Parseval's identity. The NPZ output
 stores ordered frequencies and coefficients for both channels, the source
 draw mask, samples, and RMS curves.
 
+## Portrait video
+
+`fourier-line-art-render` reads the schema-versioned NPZ, displays the source
+skeleton and current partial reconstruction, and animates the Fourier vector
+chain through one period at each increasing term count. It renders up to 24
+individual rotating circles; when the reconstruction uses more terms, their
+remaining vector sum is shown as a dashed resultant so the full endpoint and
+trace remain exact without filling the phone-sized frame with hundreds of
+unreadable circles. The error plot and readout use the full active term count.
+The current backend uses Matplotlib and FFmpeg to write H.264 `yuv420p` MP4 at
+9:16 by default. It can be replaced or supplemented without changing the
+solver or the NPZ contract.
+
 The exact RPP state search is suitable for testing and small inputs, not large
 maps. The fallback has no optimality guarantee for a general image-derived
 instance. Both behaviors are explicit in the API and tested.

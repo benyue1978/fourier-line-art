@@ -1,6 +1,6 @@
 # Algorithm Test Plan
 
-The solver is tested independently of image processing and Manim. Small graphs
+The solver is tested independently of image processing and video rendering. Small graphs
 have hand-computable optimum costs; larger fixtures check invariants and limits.
 
 ## Data structures
@@ -72,10 +72,24 @@ are equally valid.
 - NPZ output contains masks, route samples, ordered Fourier frequencies and
   coefficients, error arrays, and schema-versioned metadata.
 
+## Video renderer
+
+- The renderer loads only the documented NPZ fields and rejects missing fields
+  or unsupported schema versions.
+- Fourier display stages are unique, strictly increasing, and end at the full
+  term count.
+- With Matplotlib and FFmpeg installed, a low-resolution integration render
+  produces a non-empty 9:16 MP4. Manual review checks early, middle, high-term,
+  and final frames for clipping, formula readability, route alignment, and the
+  error readout.
+
 ## Running tests
 
 ```bash
 python -m pip install -r requirements-dev.txt
 python -m pytest
 ```
+
+For the optional MP4 integration test, also install `fourier-line-art[video]`
+and make FFmpeg available on `PATH`.
 
