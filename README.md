@@ -2,7 +2,7 @@
 
 Turn a black-and-white line drawing into one closed route, approximate the route with a discrete Fourier transform, and render the reconstruction as a phone-portrait MP4. The image solver, saved result, and video renderer are separate stages.
 
-The repository includes a small disconnected-stroke smiley image so the full workflow can be tried without preparing an input image.
+The repository includes two sample images: a disconnected-stroke smiley and a connected county-boundary map of Jilin Province. They demonstrate the two route cases without needing to prepare an input image.
 
 ## Quick start
 
@@ -40,6 +40,29 @@ fourier-line-art-render build/smiley.npz \
 ```
 
 Open the MP4 in a desktop video player or copy it to a phone. The file uses H.264 with `yuv420p` pixel format for broad mobile playback support.
+
+## Connected example: Jilin county map
+
+`examples/jilin_counties.png` is a label-free black-and-white map of Jilin's county-level boundaries. It becomes one connected skeleton component, so the solver uses the Chinese Postman solver and does not need pen-up connectors.
+
+Solve and render it with:
+
+```bash
+fourier-line-art examples/jilin_counties.png \
+  --output build/jilin-counties.npz \
+  --threshold 128 \
+  --connectivity 8 \
+  --samples 4096
+
+fourier-line-art-render build/jilin-counties.npz \
+  --output build/jilin-counties-portrait.mp4
+```
+
+At 4096 route samples, each coordinate has 2048 harmonics. With the default render settings, the portrait video is about 16 seconds. The RMS readout measures Fourier reconstruction error against the sampled route; it is not a measure of geographic boundary accuracy.
+
+The county outlines were rasterized from GeoJSON in the [ChinaGeoJson repository](https://github.com/zhChuXiao/ChinaGeoJson), which attributes its map data to [Alibaba DataV.GeoAtlas](https://datav.aliyun.com/). This image is an algorithm example, not an official reference map.
+
+The smiley example uses the same commands with `examples/demo_smiley.png`, as shown in Quick start. Its separate strokes are connected by optional pen-up travel; the Jilin example instead exercises a connected branched network.
 
 ## What the video shows
 
