@@ -71,6 +71,13 @@ coordinate guides; pen-up travel between drawing strokes is omitted from the
 visible route. The blue trace is gated by the source draw mask, while both
 Fourier chains continue to animate.
 
+Both coordinate chains use the image's pixel-to-map scale. X's chain is placed
+to the left with its extent determined by the image width; Y's chain sits above
+with its extent determined by the image height. The horizontal dashed guide
+starts at the X chain's moving endpoint and meets the map tip; the vertical
+guide does the same for the Y chain. This ties each visible wheel to the point
+the two coordinate sums produce.
+
 The default 512 route samples produce 256 positive-frequency harmonics per
 coordinate. Term counts follow a denser milestone sequence from 1 through 256,
 with a full period at each stage and 0.8 seconds per stage. The error graph uses

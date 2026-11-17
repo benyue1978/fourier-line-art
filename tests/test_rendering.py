@@ -8,6 +8,9 @@ from PIL import Image
 from fourier_line_art.pipeline import solve_image
 from fourier_line_art.rendering import (
     RenderInputError,
+    _chain_extent,
+    _evaluate_axis,
+    _scene_bounds,
     load_render_data,
     render_video,
     stage_schedule,
@@ -72,6 +75,35 @@ def test_load_render_data_reads_npz_and_rejects_invalid_schema(tmp_path):
     )
     with pytest.raises(RenderInputError, match="schema version"):
         load_render_data(malformed)
+
+
+def test_scene_bounds_scale_both_wheels_in_source_pixel_units(tmp_path):
+    data = load_render_data(_make_solver_result(tmp_path))
+    levels = stage_schedule(data.term_count)
+    times = np.linspace(0.0, 1.0, 257)
+    curves = {
+        count: (
+            _evaluate_axis(data.x_mean, data.x_frequencies, data.x_amplitudes,
+                           data.x_phases, times, count),
+            _evaluate_axis(data.y_mean, data.y_frequencies, data.y_amplitudes,
+                           data.y_sine_phases, times, count, sine=True),
+        )
+        for count in levels
+    }
+    map_width = 3.5
+    map_scale = map_width / data.skeleton.shape[1]
+    map_height = data.skeleton.shape[0] * map_scale
+
+    scene = _scene_bounds(data, levels, curves, times, map_scale, map_width, map_height)
+
+    assert scene[4] == pytest.approx(
+        -_chain_extent(data.x_frequencies, data.x_amplitudes, data.x_phases) * map_scale - 0.18
+    )
+    assert scene[5] == pytest.approx(
+        -_chain_extent(data.y_frequencies, data.y_amplitudes, data.y_sine_phases) * map_scale - 0.18
+    )
+    assert scene[0] < 0 < map_width < scene[1]
+    assert scene[2] < 0 < map_height < scene[3]
 
 
 @pytest.mark.skipif(shutil.which("ffmpeg") is None, reason="FFmpeg is needed for MP4 output")

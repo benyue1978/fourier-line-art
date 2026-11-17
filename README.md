@@ -43,9 +43,9 @@ Open the MP4 in a desktop video player or copy it to a phone. The file uses H.26
 
 ## What the video shows
 
-- **One combined diagram:** the X circle chain is on the left, the Y circle chain is above, and the source drawing with its current blue reconstruction is on the right. Both component sums control the map's current pen point.
+- **One combined diagram:** the X circle chain is on the left, the Y circle chain is above, and the source drawing with its current blue reconstruction is on the right. Both chains use the source image's pixel-to-map scale, so X follows the image width and Y follows its height.
 - **Formula card:** separate real Fourier formulas for `x_N(t)` and `y_N(t)`, plus the live normalized pen-tip coordinate and current term count `N`.
-- **XY guides:** horizontal and vertical dashed projections locate the current point in the source drawing. Pen-up travel between strokes is hidden; it does not appear as a connecting line.
+- **XY guides:** the horizontal dashed line runs from the X wheel's moving endpoint to the map pen tip; the vertical dashed line runs from the Y wheel's moving endpoint to the same tip. Pen-up travel between strokes is hidden; it does not appear as a connecting line.
 - **Error graph:** relative XY RMS error versus term count. The readout gives both the relative error and the pixel-space RMS error for the current stage.
 
 The NPZ is also useful without rendering: it contains the source masks, sampled `(x, y, height)` route, draw-state mask, ordered Fourier frequencies and coefficients, RMS errors, and solver metadata. Inspect its metadata with:

@@ -84,8 +84,9 @@ are equally valid.
   term count.
 - With Matplotlib and FFmpeg installed, a low-resolution integration render
   produces a non-empty 9:16 MP4. Manual review checks early, middle, high-term,
-  and final frames for clipping, separate X/Y chains, coordinate guides, hidden
-  pen-up travel, route alignment, and the error readout.
+  and final frames for clipping, X/Y chain scale against source width/height,
+  dashed guides joining each wheel endpoint to the map tip, hidden pen-up travel,
+  route alignment, and the error readout.
 
 ## Running tests
 

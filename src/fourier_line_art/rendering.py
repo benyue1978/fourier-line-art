@@ -202,6 +202,62 @@ def _chain_extent(frequencies, amplitudes, phases) -> float:
     return max(float(np.max(np.abs(starts) + amplitudes[:, None])), 1e-12)
 
 
+def _scene_bounds(data, levels, stage_curves, times, map_scale, map_width, map_height):
+    """Fit the map and both dimension-scaled wheel chains without excess margins."""
+    x_extent = _chain_extent(data.x_frequencies, data.x_amplitudes, data.x_phases) * map_scale
+    y_extent = _chain_extent(data.y_frequencies, data.y_amplitudes, data.y_sine_phases) * map_scale
+    x_center_x = -x_extent - 0.18
+    y_center_y = -y_extent - 0.18
+    bounds = [0.0, map_width, 0.0, map_height]
+
+    for count in levels:
+        x_curve, y_curve = stage_curves[count]
+        map_x, map_y = x_curve * map_scale, y_curve * map_scale
+
+        x_vectors = data.x_amplitudes[:count, None] * np.exp(
+            2j * np.pi * data.x_frequencies[:count, None] * times[None, :]
+            + 1j * data.x_phases[:count, None]
+        )
+        x_prefix = np.concatenate(
+            (np.zeros((1, len(times)), dtype=np.complex128), np.cumsum(x_vectors, axis=0)),
+            axis=0,
+        ) * map_scale
+        x_radii = data.x_amplitudes[:count, None] * map_scale
+        x_centers = np.stack((
+            x_center_x + x_prefix[:-1].real,
+            map_y[None, :] - x_prefix[-1].imag + x_prefix[:-1].imag,
+        ))
+        bounds[0] = min(bounds[0], float(np.min(x_centers[0] - x_radii)))
+        bounds[1] = max(bounds[1], float(np.max(x_centers[0] + x_radii)))
+        bounds[2] = min(bounds[2], float(np.min(x_centers[1] - x_radii)))
+        bounds[3] = max(bounds[3], float(np.max(x_centers[1] + x_radii)))
+
+        y_vectors = data.y_amplitudes[:count, None] * np.exp(
+            2j * np.pi * data.y_frequencies[:count, None] * times[None, :]
+            + 1j * data.y_sine_phases[:count, None]
+        )
+        y_prefix = np.concatenate(
+            (np.zeros((1, len(times)), dtype=np.complex128), np.cumsum(y_vectors, axis=0)),
+            axis=0,
+        ) * map_scale
+        y_radii = data.y_amplitudes[:count, None] * map_scale
+        y_centers = np.stack((
+            map_x[None, :] - y_prefix[-1].real + y_prefix[:-1].real,
+            y_center_y + y_prefix[:-1].imag,
+        ))
+        bounds[0] = min(bounds[0], float(np.min(y_centers[0] - y_radii)))
+        bounds[1] = max(bounds[1], float(np.max(y_centers[0] + y_radii)))
+        bounds[2] = min(bounds[2], float(np.min(y_centers[1] - y_radii)))
+        bounds[3] = max(bounds[3], float(np.max(y_centers[1] + y_radii)))
+
+    margin = 0.18
+    return (
+        bounds[0] - margin, bounds[1] + margin,
+        bounds[2] - margin, bounds[3] + margin,
+        x_center_x, y_center_y, x_extent, y_extent,
+    )
+
+
 def render_video(
     npz_path: str | Path,
     output_path: str | Path,
@@ -265,6 +321,10 @@ def render_video(
         )
         for count in levels
     }
+    (
+        scene_x_min, scene_x_max, scene_y_min, scene_y_max,
+        x_center_x, y_center_y, x_extent, y_extent,
+    ) = _scene_bounds(data, levels, stage_curves, times, map_scale, map_width, map_height)
     diagonal = max(float(np.hypot(image_width, image_height)), 1.0)
     xy_errors = np.sqrt(data.x_rms_errors**2 + data.y_rms_errors**2)
     relative_errors = xy_errors / diagonal
@@ -316,10 +376,15 @@ def render_video(
     main_ax = fig.add_axes((0.055, 0.225, 0.89, 0.535), facecolor="#F4F8F8")
     main_ax.set_axis_off()
     main_ax.set_aspect("equal", adjustable="box")
-    main_ax.set_xlim(-2.25, map_width + 0.22)
-    x_center = (-1.28, map_height * 0.5)
-    y_center = (map_width * 0.5, -1.08)
-    main_ax.set_ylim(map_height + 0.24, -2.20)
+    main_ax.set_xlim(scene_x_min, scene_x_max)
+    main_ax.set_ylim(scene_y_max, scene_y_min)
+    # One input pixel has the same display scale in both real coordinate series.
+    # Thus the X chain's radius sum follows the source width and the Y chain's
+    # follows the source height.
+    x_scale = map_scale
+    y_scale = map_scale
+    x_center = (x_center_x, map_height * 0.5)
+    y_center = (map_width * 0.5, y_center_y)
 
     rgba = np.zeros((image_height, image_width, 4), dtype=np.float32)
     rgba[..., :3] = (0.18, 0.27, 0.32)
@@ -340,9 +405,6 @@ def render_video(
     (y_guide,) = main_ax.plot([], [], color="#4B9298", linewidth=1.15,
                               linestyle=(0, (4, 3)), alpha=0.85, zorder=4)
 
-    x_scale = 0.82 / _chain_extent(data.x_frequencies, data.x_amplitudes, data.x_phases)
-    y_scale = 0.82 / _chain_extent(data.y_frequencies, data.y_amplitudes, data.y_sine_phases)
-
     def add_chain(frequencies, amplitudes, phases, center, scale, output_axis, color):
         vectors, circles = [], []
         for _ in frequencies:
@@ -354,25 +416,22 @@ def render_video(
             circles.append(circle)
         endpoint = main_ax.scatter([], [], s=13, color=color, edgecolors="white",
                                    linewidths=0.4, zorder=5)
-        (projection,) = main_ax.plot([], [], color="#67868C", linewidth=0.75, alpha=0.68, zorder=3)
-        projected_tip = main_ax.scatter([], [], s=8, color="#E07040", zorder=5)
         return {
             "frequencies": frequencies, "amplitudes": amplitudes, "phases": phases,
             "center": center, "scale": scale, "output_axis": output_axis,
             "vectors": vectors, "circles": circles, "endpoint": endpoint,
-            "projection": projection, "projected_tip": projected_tip,
         }
 
-    x_center = (-1.28, map_height * 0.5)
-    y_center = (map_width * 0.5, -1.08)
     x_chain = add_chain(data.x_frequencies, data.x_amplitudes, data.x_phases,
                         x_center, x_scale, "x", "#287B8E")
     y_chain = add_chain(data.y_frequencies, data.y_amplitudes, data.y_sine_phases,
                         y_center, y_scale, "y", "#2E8B78")
-    main_ax.text(x_center[0], x_center[1] - 0.94, "X 分量", ha="center", va="bottom",
-                 fontsize=11, fontweight="bold", color="#287B8E")
-    main_ax.text(y_center[0], y_center[1] - 0.94, "Y 分量", ha="center", va="bottom",
-                 fontsize=11, fontweight="bold", color="#2E8B78")
+    x_label = main_ax.text(x_center[0], x_center[1] - x_extent - 0.12, "X 分量",
+                           ha="center", va="bottom", fontsize=11,
+                           fontweight="bold", color="#287B8E")
+    y_label = main_ax.text(y_center[0], y_center[1] - y_extent - 0.12, "Y 分量",
+                           ha="center", va="bottom", fontsize=11,
+                           fontweight="bold", color="#2E8B78")
 
     point_text = fig.text(0.91, 0.779, "", ha="right", va="center", fontsize=9, color="#527080")
     fig.text(0.08, 0.19, "相对 RMS 误差", ha="left", va="center", fontsize=11,
@@ -399,7 +458,7 @@ def render_video(
     fig.text(0.5, 0.035, "蓝色 = 当前描线　·　灰色 = 原图中心线　·　虚线 = X/Y 坐标投影",
              ha="center", va="center", fontsize=8, color="#667F89")
 
-    def update_chain(chain, t, term_count):
+    def update_chain(chain, t, term_count, pen_point):
         frequencies = chain["frequencies"]
         amplitudes = chain["amplitudes"]
         phases = chain["phases"]
@@ -408,8 +467,15 @@ def render_video(
             2j * np.pi * frequencies[:active_count] * t + 1j * phases[:active_count]
         )
         prefix = np.concatenate(([0j], np.cumsum(rotated)))
-        center_x, center_y = chain["center"]
         scale = chain["scale"]
+        tip = prefix[-1] * scale
+        if chain["output_axis"] == "x":
+            center_x = chain["center"][0]
+            center_y = pen_point[1] - tip.imag
+        else:
+            center_x = pen_point[0] - tip.real
+            center_y = chain["center"][1]
+        chain["center"] = (center_x, center_y)
         for index, (vector, circle) in enumerate(zip(chain["vectors"], chain["circles"])):
             if index >= active_count:
                 vector.set_visible(False)
@@ -424,13 +490,9 @@ def render_video(
             circle.radius = radius
             circle.set_visible(radius >= 0.012)
 
-        tip = prefix[-1] * scale
         tip_xy = (center_x + tip.real, center_y + tip.imag)
         chain["endpoint"].set_offsets([tip_xy])
-        projection_xy = (tip_xy[0], center_y) if chain["output_axis"] == "x" else (center_x, tip_xy[1])
-        chain["projection"].set_data([tip_xy[0], projection_xy[0]],
-                                     [tip_xy[1], projection_xy[1]])
-        chain["projected_tip"].set_offsets([projection_xy])
+        return tip_xy
 
     def update(frame: int):
         if frame >= frames_for_stages:
@@ -449,11 +511,15 @@ def render_video(
         time_index = min(visible_end - 1, len(times) - 1)
         point_x, point_y = float(x_curve[time_index] * map_scale), float(y_curve[time_index] * map_scale)
         map_point.set_offsets([[point_x, point_y]])
-        x_guide.set_data([0, point_x], [point_y, point_y])
-        y_guide.set_data([point_x, point_x], [0, point_y])
         t = float(times[time_index])
-        update_chain(x_chain, t, term_count)
-        update_chain(y_chain, t, term_count)
+        x_tip = update_chain(x_chain, t, term_count, (point_x, point_y))
+        y_tip = update_chain(y_chain, t, term_count, (point_x, point_y))
+        # The horizontal X guide begins at the moving point on the left wheel;
+        # the vertical Y guide begins at the moving point on the upper wheel.
+        x_guide.set_data([x_tip[0], point_x], [point_y, point_y])
+        y_guide.set_data([point_x, point_x], [y_tip[1], point_y])
+        x_label.set_position((x_chain["center"][0], x_chain["center"][1] - x_extent - 0.12))
+        y_label.set_position((y_chain["center"][0], y_chain["center"][1] - y_extent - 0.12))
 
         x_norm = float(x_curve[time_index] / max(image_width - 1, 1))
         y_norm = float(y_curve[time_index] / max(image_height - 1, 1))
@@ -473,11 +539,10 @@ def render_video(
         error_marker.set_data([term_count], [relative_error])
         return [map_trace, map_point, x_guide, y_guide, formula_state, point_text,
                 x_numeric_formula, y_numeric_formula,
-                error_readout, error_marker,
+                error_readout, error_marker, x_label, y_label,
                 *x_chain["vectors"], *x_chain["circles"], x_chain["endpoint"],
-                x_chain["projection"], x_chain["projected_tip"],
                 *y_chain["vectors"], *y_chain["circles"], y_chain["endpoint"],
-                y_chain["projection"], y_chain["projected_tip"]]
+                ]
 
     animation = FuncAnimation(
         fig, update, frames=total_frames, interval=1000 / fps,
