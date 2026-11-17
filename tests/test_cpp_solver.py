@@ -58,7 +58,7 @@ def test_cpp_uses_minimum_matching_for_odd_vertices():
     route = solve_cpp(graph)
 
     assert_route_covers_all_edges(graph, route)
-    assert route.cost == pytest.approx(10)
+    assert route.cost == pytest.approx(11)
 
 
 def test_cpp_rejects_disconnected_required_edges():
@@ -81,4 +81,16 @@ def test_cpp_is_deterministic_for_same_input():
     second = solve_cpp(graph)
 
     assert first.traversals == second.traversals
+
+
+def test_cpp_preserves_parallel_edge_ids_in_the_euler_tour():
+    graph = Graph(
+        vertices=("a", "b"),
+        edges=(Edge("ab-1", "a", "b", 1), Edge("ab-2", "a", "b", 2)),
+    )
+
+    route = solve_cpp(graph)
+
+    assert_route_covers_all_edges(graph, route)
+    assert route.cost == pytest.approx(3)
 

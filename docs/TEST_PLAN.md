@@ -32,6 +32,7 @@ have hand-computable optimum costs; larger fixtures check invariants and limits.
 | Required component with branches | Every required edge is covered, including repeated traversals where necessary |
 | No optional connection between required components | Explicit infeasible-route error |
 | State-space limit | Exact solver refuses oversized instances with a documented exception |
+| Frederickson-style fallback | MST connector paths join required components; CPP returns a closed feasible route |
 
 The exact RPP implementation uses Dijkstra on an edge-coverage state graph for
 small compressed graphs. Its exponential dependence on the number of required
@@ -46,6 +47,7 @@ scalable general-purpose RPP implementation.
 | Full set of DFT terms | Reconstructs all input samples within floating-point tolerance |
 | Increasing term count | Orthogonal partial reconstruction RMS does not increase |
 | Invalid term count or empty input | Clear validation error |
+| Multiple channels | Parseval error curve agrees with direct RMS computation |
 
 ## Image-to-graph conversion
 
@@ -60,6 +62,15 @@ Image preprocessing tests use tiny synthetic masks rather than screenshots:
 The tests assert component counts, edge coverage, graph connectivity, and route
 geometry. They avoid brittle pixel-by-pixel snapshots where multiple skeletons
 are equally valid.
+
+## End-to-end solve result
+
+- A connected drawing selects CPP; a disconnected drawing selects exact RPP
+  until the explicit limit, then the MST/CPP fallback.
+- The resulting route is closed, has draw and pen-up samples, and yields
+  monotone XY/height RMS curves.
+- NPZ output contains masks, route samples, ordered Fourier frequencies and
+  coefficients, error arrays, and schema-versioned metadata.
 
 ## Running tests
 

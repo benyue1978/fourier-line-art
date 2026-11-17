@@ -14,6 +14,9 @@ dependencies = [
   "scikit-image>=0.22,<1",
 ]
 
+[project.scripts]
+fourier-line-art = "fourier_line_art.cli:main"
+
 [project.optional-dependencies]
 dev = ["pytest>=8,<9"]
 

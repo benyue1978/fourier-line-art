@@ -27,6 +27,7 @@ def test_graph_preserves_parallel_edges_and_counts_undirected_degree():
         (("a",), (Edge("x", "a", "missing", 1),)),
         (("a", "b"), (Edge("x", "a", "b", -1),)),
         (("a", "b"), (Edge("x", "a", "b", math.inf),)),
+        (("a", "b"), (Edge("x", "a", "b", "heavy"),)),
     ],
 )
 def test_graph_rejects_invalid_edges(vertices, edges):

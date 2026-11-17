@@ -5,6 +5,7 @@ from fourier_line_art.solvers import (
     NoFeasibleRoute,
     ProblemTooLarge,
     solve_rpp_exact,
+    solve_rpp_frederickson,
 )
 
 
@@ -60,4 +61,39 @@ def test_rpp_no_required_edges_returns_empty_route():
     assert route.traversals == ()
     assert route.cost == 0
     assert route.is_closed
+
+
+def test_rpp_covers_all_branches_even_when_edges_must_repeat():
+    graph = Graph(
+        vertices=("hub", "a", "b", "c"),
+        edges=(
+            Edge("ha", "hub", "a", 1, required=True),
+            Edge("hb", "hub", "b", 1, required=True),
+            Edge("hc", "hub", "c", 1, required=True),
+        ),
+    )
+
+    route = solve_rpp_exact(graph)
+
+    assert route.is_closed
+    assert {"ha", "hb", "hc"} <= {step.edge_id for step in route.traversals}
+    assert route.cost == pytest.approx(6)
+
+
+def test_frederickson_heuristic_connects_required_components_then_solves_cpp():
+    graph = Graph(
+        vertices=("a", "b", "c", "d"),
+        edges=(
+            Edge("ab", "a", "b", 1, required=True, geometry=((0, 0), (1, 0))),
+            Edge("cd", "c", "d", 1, required=True, geometry=((4, 0), (5, 0))),
+            Edge("bc", "b", "c", 4, required=False, kind="pen_up", geometry=((1, 0), (4, 0))),
+            Edge("ad", "a", "d", 6, required=False, kind="pen_up", geometry=((0, 0), (5, 0))),
+        ),
+    )
+
+    route = solve_rpp_frederickson(graph)
+
+    assert route.is_closed
+    assert {"ab", "cd"} <= {step.edge_id for step in route.traversals}
+    assert any(route.graph.edge_by_id(step.edge_id).kind == "pen_up" for step in route.traversals)
 

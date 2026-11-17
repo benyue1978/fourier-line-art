@@ -18,6 +18,11 @@ def test_full_dft_reconstructs_arbitrary_complex_samples():
     series = FourierSeries.from_samples(samples)
 
     np.testing.assert_allclose(series.reconstruct(len(samples)), samples, atol=1e-12)
+    np.testing.assert_allclose(
+        series.evaluate(np.arange(len(samples)) / len(samples), len(samples)),
+        samples,
+        atol=1e-12,
+    )
 
 
 def test_rms_error_does_not_increase_when_terms_are_added():
@@ -47,4 +52,31 @@ def test_fourier_rejects_empty_and_non_finite_samples():
         FourierSeries.from_samples(np.array([], dtype=complex))
     with pytest.raises(FourierValidationError):
         FourierSeries.from_samples(np.array([1 + 0j, complex(float("nan"), 0)]))
+
+
+def test_fourier_rejects_boolean_term_count_and_non_finite_time():
+    series = FourierSeries.from_samples(np.array([1 + 0j, 2 + 1j]))
+
+    with pytest.raises(FourierValidationError):
+        series.evaluate(0.5, True)
+    with pytest.raises(FourierValidationError):
+        series.evaluate(float("nan"), 1)
+
+
+def test_vector_signal_parseval_errors_match_direct_sample_errors():
+    samples = np.array(
+        [
+            [1 + 2j, 0.5 - 1j],
+            [2 - 1j, -1 + 0.25j],
+            [-0.5 + 1j, 3 + 2j],
+            [4 + 0j, 1 - 2j],
+        ]
+    )
+    series = FourierSeries.from_samples(samples)
+
+    np.testing.assert_allclose(
+        series.rms_errors(),
+        [series.rms_error(count) for count in range(len(samples) + 1)],
+        atol=1e-12,
+    )
 
