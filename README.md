@@ -64,12 +64,45 @@ The county outlines were rasterized from GeoJSON in the [ChinaGeoJson repository
 
 The smiley example uses the same commands with `examples/demo_smiley.png`, as shown in Quick start. Its separate strokes are connected by optional pen-up travel; the Jilin example instead exercises a connected branched network.
 
+## How route solving works
+
+### Image to skeleton graph
+
+The solver converts the image to grayscale, treats transparent pixels as background, and thresholds dark pixels into a foreground mask. It then thins the mask to a one-pixel skeleton and labels its connected components using the selected 4- or 8-neighbor rule. Connectivity is determined from this processed raster, so a small gap or a diagonal-only contact can change whether two strokes count as connected.
+
+The skeleton becomes an undirected weighted graph. Endpoints and junctions become vertices; chains of degree-2 pixels are compressed into edges weighted by their pixel length. Every skeleton edge is a required drawing edge. The solver does not ask the user to pair branches at a crossing: it plans a walk that covers every required edge.
+
+### One connected component: Chinese Postman Problem
+
+When the required graph is connected, the solver uses the undirected Chinese Postman Problem (CPP) to find a minimum-cost closed walk that covers every edge. It finds shortest paths between odd-degree vertices, pairs those vertices with a minimum-weight perfect matching, duplicates the matched paths to make all degrees even, then builds an Euler tour with Hierholzer's algorithm. The route can retrace some drawing edges; on the image those retraces lie on top of the same strokes. No pen-up connectors are needed.
+
+### Multiple components: Rural Postman Problem and pen-up travel
+
+When the skeleton has multiple connected components, all drawing edges remain required. The solver adds optional straight pen-up candidates between vertices in different components. Their cost is the XY travel distance plus a lift-and-land cost based on `--lift-height`. A Rural Postman Problem (RPP) solver chooses connectors and repeated edges to produce one closed route covering all required drawing edges.
+
+The route records pen-down travel at height `lift-height` and lifted travel at height zero. Thus separate 2D strokes are joined into one continuous 3D route with a draw-state mask; the program does not make each stroke its own Fourier formula. Small compressed RPP instances are solved exactly with a state-space search, up to the defaults of 15 required edges and 2,000,000 states. If either limit is exceeded, the solver uses a Frederickson-style minimum-spanning-tree/CPP heuristic. That fallback returns a feasible closed route when the candidates connect the components, but it does not promise the global minimum cost.
+
+### One sampled route, then Fourier approximation
+
+The closed route is resampled uniformly by arc length and saved as `(x, y, height)` samples plus a draw-state mask. The solver transforms the real X and Y signals separately (and also preserves the height signal). At each video stage, both coordinates use the same prefix of ascending frequencies, from 1 through `N`; their amplitudes and phases remain independent. In shorthand, the displayed curve is the pair `(x_N(t), y_N(t))`:
+
+$$
+x_N(t)=x_0+\sum_{k=1}^{N}A_{x,k}\cos(2\pi kt+\phi_{x,k}),\qquad
+y_N(t)=y_0+\sum_{k=1}^{N}A_{y,k}\sin(2\pi kt+\phi_{y,k}).
+$$
+
+Its first harmonic pair traces an ellipse, or a degenerate ellipse in special cases.
+
+`--samples` controls route-sample resolution. A 512-sample route has 256 positive-frequency harmonics per coordinate; 4096 samples have 2048. Increasing `N` adds detail to the same closed route. The displayed XY RMS error compares the partial Fourier reconstruction with the solved route samples, including any pen-up XY travel. Its percentage is normalized by the source-image diagonal. It measures Fourier truncation error, not how accurately the skeleton represents the original artwork or a geographic boundary.
+
 ## What the video shows
 
 - **One combined diagram:** the X circle chain is above the source drawing, the Y chain is to its left, and the map shows the current blue reconstruction. Their fixed output axes share the map's coordinate frame: the X endpoint has exactly the map point's x coordinate, and the Y endpoint has exactly its y coordinate. Both use the same source-pixel scale.
 - **Formula card:** separate real Fourier formulas for `x_N(t)` and `y_N(t)`, plus the live normalized pen-tip coordinate and current term count `N`.
-- **Coordinate guides:** one dashed vertical line connects the X endpoint directly to the map pen tip; one dashed horizontal line connects the Y endpoint directly to the same point. There is no origin bridge or coordinate offset. Pen-up travel is shown as a faint solid trace that fades as terms are added, then disappears at full precision.
-- **Error graph:** relative XY RMS error versus term count. The readout gives both the relative error and the pixel-space RMS error for the current stage.
+- **Coordinate guides:** one dashed vertical line connects the X endpoint directly to the map pen tip; one dashed horizontal line connects the Y endpoint directly to the same point. These dashed guides show the direct X/Y projections; they are not pen-up paths. There is no origin bridge or coordinate offset.
+- **Draw and lift states:** the source skeleton is a light reference, the current pen-down reconstruction is blue, and pen-up travel is a thin pale trace on the map. That pale trace fades as terms are added and disappears at full precision. Pen-up connectors are not drawn in the rotating-circle chains.
+- **Fourier stages:** the renderer uses a progressively denser sequence of term counts, animating one full period at each stage. The formula card shows the current `N`; the numeric equation previews the first active terms and uses an ellipsis for the rest.
+- **Error graph:** relative XY RMS error versus term count. The readout gives both the relative error and the pixel-space RMS error for the current stage. At full DFT resolution the sampled route reconstructs to numerical precision; this does not remove image-thresholding or skeletonization error.
 
 The NPZ is also useful without rendering: it contains the source masks, sampled `(x, y, height)` route, draw-state mask, ordered Fourier frequencies and coefficients, RMS errors, and solver metadata. Inspect its metadata with:
 
@@ -162,13 +195,6 @@ examples/         sample input and its generator
 
 The renderer reads only the versioned NPZ result. This keeps image solving and route algorithms independent from the video backend and makes it possible to add another renderer later.
 
-## Algorithm notes and limits
+## Algorithm limits and further details
 
-- Connected line art is converted to a weighted graph and solved as a Chinese Postman Problem, producing a closed walk that covers every required edge.
-- Disconnected strokes receive optional pen-up connectors. The route and its sampled `(x, y, height)` points are still represented as one closed parameterized path.
-- Small Rural Postman Problems use an exact state-space search. The search has explicit edge and state limits because its state count grows exponentially.
-- Larger Rural Postman Problems use the MST/CPP heuristic described in [`docs/ALGORITHMS.md`](docs/ALGORITHMS.md).
-- X and Y are transformed as separate real signals and paired by the same ascending frequency. Each stage adds the next frequency to both axes, so the first pair traces an ellipse. The saved RMS error is calculated from the omitted coefficient energy for that frequency prefix.
-- A raster skeleton is a pixel-level estimate of a centerline. Thick, touching, noisy, or ambiguous strokes can change the extracted topology; inspect the NPZ masks and rendered comparison when an input looks unexpected.
-
-See [`docs/TEST_PLAN.md`](docs/TEST_PLAN.md) for solver and renderer test coverage.
+The extracted skeleton is a pixel-level estimate of a centerline. Thick, touching, noisy, anti-aliased, or ambiguous strokes can change its topology; inspect the source mask and skeleton in the NPZ when the route looks unexpected. Exact RPP search is intended for small instances, while the MST/CPP fallback has no general optimality guarantee. For implementation details and solver invariants, see [`docs/ALGORITHMS.md`](docs/ALGORITHMS.md); for algorithm and renderer coverage, see [`docs/TEST_PLAN.md`](docs/TEST_PLAN.md).
