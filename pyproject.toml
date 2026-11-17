@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "fourier-line-art"
+version = "0.1.0"
+description = "Graph solvers and Fourier reconstruction for line-art drawing animations"
+requires-python = ">=3.11"
+dependencies = [
+  "networkx>=3.2,<4",
+  "numpy>=1.26,<3",
+  "Pillow>=10,<13",
+  "scikit-image>=0.22,<1",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8,<9"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
+
