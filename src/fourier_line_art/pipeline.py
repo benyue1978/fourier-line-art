@@ -48,7 +48,7 @@ class SolveResult:
         output_path = Path(output_path)
         output_path.parent.mkdir(parents=True, exist_ok=True)
         metadata = {
-            "schema_version": 2,
+            "schema_version": 3,
             "solver": self.solver_name,
             "required_edge_count": sum(edge.required for edge in self.analysis.graph.edges),
             "graph_edge_count": len(self.analysis.graph.edges),
@@ -62,7 +62,7 @@ class SolveResult:
             "invert": self.invert,
             "connectivity": self.analysis.connectivity,
             "lift_height": self.lift_height,
-            "xy_convention": "separate real x cosine and y sine harmonics; cycles per period",
+            "xy_convention": "separate real x cosine and y sine harmonics, paired by ascending frequency",
         }
         with output_path.open("wb") as output:
             np.savez_compressed(
@@ -76,15 +76,15 @@ class SolveResult:
                 xy_frequencies=self.xy_series.ordered_frequencies,
                 xy_coefficients=self.xy_series.ordered_coefficients,
                 x_mean=np.asarray(self.x_series.mean),
-                x_frequencies=self.x_series.ordered_frequencies,
-                x_amplitudes=self.x_series.ordered_amplitudes,
-                x_phases=self.x_series.ordered_phases,
-                x_rms_errors=self.x_series.rms_errors(),
+                x_frequencies=self.x_series.frequency_ordered_frequencies,
+                x_amplitudes=self.x_series.frequency_ordered_amplitudes,
+                x_phases=self.x_series.frequency_ordered_phases,
+                x_rms_errors=self.x_series.frequency_ordered_rms_errors(),
                 y_mean=np.asarray(self.y_series.mean),
-                y_frequencies=self.y_series.ordered_frequencies,
-                y_amplitudes=self.y_series.ordered_amplitudes,
-                y_sine_phases=self.y_series.ordered_phases + np.pi / 2,
-                y_rms_errors=self.y_series.rms_errors(),
+                y_frequencies=self.y_series.frequency_ordered_frequencies,
+                y_amplitudes=self.y_series.frequency_ordered_amplitudes,
+                y_sine_phases=self.y_series.frequency_ordered_phases + np.pi / 2,
+                y_rms_errors=self.y_series.frequency_ordered_rms_errors(),
                 height_frequencies=self.height_series.ordered_frequencies,
                 height_coefficients=self.height_series.ordered_coefficients,
                 xy_rms_errors=self.xy_rms_errors,

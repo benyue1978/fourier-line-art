@@ -241,6 +241,21 @@ class RealFourierSeries:
         values.setflags(write=False)
         return values
 
+    @property
+    def frequency_ordered_frequencies(self) -> np.ndarray:
+        """Positive frequencies in ascending order, shared by X and Y series."""
+        return self._frequencies
+
+    @property
+    def frequency_ordered_amplitudes(self) -> np.ndarray:
+        """Amplitudes in ascending frequency order."""
+        return self._amplitudes
+
+    @property
+    def frequency_ordered_phases(self) -> np.ndarray:
+        """Phases in ascending frequency order."""
+        return self._phases
+
     def evaluate(self, t, term_count: int) -> np.ndarray:
         """Evaluate the offset plus the requested highest-energy harmonics."""
         if (
@@ -286,6 +301,13 @@ class RealFourierSeries:
         """Return the RMS errors for term counts zero through full precision."""
         ordered = self._energies[list(self._order)]
         remaining = np.concatenate((np.cumsum(ordered[::-1])[::-1], [0.0]))
+        errors = np.sqrt(np.maximum(remaining, 0.0))
+        errors.setflags(write=False)
+        return errors
+
+    def frequency_ordered_rms_errors(self) -> np.ndarray:
+        """RMS errors when harmonics are added in ascending frequency order."""
+        remaining = np.concatenate((np.cumsum(self._energies[::-1])[::-1], [0.0]))
         errors = np.sqrt(np.maximum(remaining, 0.0))
         errors.setflags(write=False)
         return errors

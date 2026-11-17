@@ -51,32 +51,38 @@ the image pipeline does not assert optimality for this fallback.
 
 ## Fourier series and errors
 
-The closed 3D route is resampled at uniform arc length. The solver keeps the
-complex `z(t) = x(t) + i*y(t)` series and also decomposes the real x and y
-signals independently. Each real series stores its mean and positive-frequency
-harmonics as amplitude/phase terms. Conjugate frequency pairs become one cosine
-harmonic; the y phase is shifted by π/2 when expressed as a sine. Terms are
-ranked by the energy they contribute to sample RMS, and each coordinate's
-partial error is computed from the omitted energy. The NPZ stores the source
-draw mask, 3D samples, complex coefficients, and separate x/y amplitudes,
-phases, frequencies, and error curves.
+The closed 3D route is resampled at uniform arc length. The renderer transforms
+the real x and y signals separately. Each series stores its mean and
+positive-frequency harmonics as amplitude/phase terms. Conjugate frequency
+pairs become one cosine harmonic; the y phase is shifted by π/2 when expressed
+as a sine. For the animation, X and Y are paired by ascending frequency, so
+stage N contains frequencies 1 through N on both axes. The first pair therefore
+traces an ellipse (or a degenerate ellipse), and every later stage adds a
+matched frequency to both coordinates. Each partial error is calculated from
+the energy of the omitted frequencies. The NPZ stores the source draw mask,
+3D samples, complex coefficients, and separate x/y amplitudes, phases,
+frequencies, and error curves.
 
 ## Portrait video
 
 `fourier-line-art-render` reads the schema-versioned NPZ and creates one
-composite diagram: X's epicycle chain sits to the left of the source drawing,
-Y's chain sits above it, and their partial sums place the live point. Horizontal
-and vertical dashed guides project that point's x/y coordinates. They are
-coordinate guides; pen-up travel between drawing strokes is omitted from the
-visible route. The blue trace is gated by the source draw mask, while both
-Fourier chains continue to animate.
+composite diagram: X's epicycle chain sits above the source drawing and Y's
+chain sits to its left. The X wheel's fixed horizontal output axis is aligned
+with the map's x coordinates; the Y wheel's fixed vertical output axis is
+aligned with the map's y coordinates. Thus the X endpoint and map point have
+the exact same x value, while the Y endpoint and map point have the exact same
+y value. A vertical dashed line connects the X endpoint to the map point, and
+a horizontal dashed line connects the Y endpoint to that point. There are no
+coordinate offsets or bridge segments. Pen-up travel is omitted from the
+visible route at full precision; partial Fourier curves remain continuous at
+earlier stages.
 
-Both coordinate chains use the image's pixel-to-map scale. X's chain is placed
-to the left with its extent determined by the image width; Y's chain sits above
-with its extent determined by the image height. The horizontal dashed guide
-starts at the X chain's moving endpoint and meets the map tip; the vertical
-guide does the same for the Y chain. This ties each visible wheel to the point
-the two coordinate sums produce.
+Both coordinate chains use the same image-pixel-to-map scale, with X extent
+following the image width and Y extent following its height. Their centers are
+fixed at the coordinate means; the harmonic endpoint is therefore the direct
+partial-sum coordinate. The X and Y projections meet at exactly the paired
+partial-sum point for the same time parameter. At N=1, that point traces an
+ellipse (or a degenerate ellipse when the phases or amplitudes collapse it).
 
 The default 512 route samples produce 256 positive-frequency harmonics per
 coordinate. Term counts follow a denser milestone sequence from 1 through 256,

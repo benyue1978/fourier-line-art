@@ -43,9 +43,9 @@ Open the MP4 in a desktop video player or copy it to a phone. The file uses H.26
 
 ## What the video shows
 
-- **One combined diagram:** the X circle chain is on the left, the Y circle chain is above, and the source drawing with its current blue reconstruction is on the right. Both chains use the source image's pixel-to-map scale, so X follows the image width and Y follows its height.
+- **One combined diagram:** the X circle chain is above the source drawing, the Y chain is to its left, and the map shows the current blue reconstruction. Their fixed output axes share the map's coordinate frame: the X endpoint has exactly the map point's x coordinate, and the Y endpoint has exactly its y coordinate. Both use the same source-pixel scale.
 - **Formula card:** separate real Fourier formulas for `x_N(t)` and `y_N(t)`, plus the live normalized pen-tip coordinate and current term count `N`.
-- **XY guides:** the horizontal dashed line runs from the X wheel's moving endpoint to the map pen tip; the vertical dashed line runs from the Y wheel's moving endpoint to the same tip. Pen-up travel between strokes is hidden; it does not appear as a connecting line.
+- **Coordinate guides:** one dashed vertical line connects the X endpoint directly to the map pen tip; one dashed horizontal line connects the Y endpoint directly to the same point. There is no origin bridge or coordinate offset. Pen-up travel between strokes is hidden at full precision.
 - **Error graph:** relative XY RMS error versus term count. The readout gives both the relative error and the pixel-space RMS error for the current stage.
 
 The NPZ is also useful without rendering: it contains the source masks, sampled `(x, y, height)` route, draw-state mask, ordered Fourier frequencies and coefficients, RMS errors, and solver metadata. Inspect its metadata with:
@@ -145,8 +145,7 @@ The renderer reads only the versioned NPZ result. This keeps image solving and r
 - Disconnected strokes receive optional pen-up connectors. The route and its sampled `(x, y, height)` points are still represented as one closed parameterized path.
 - Small Rural Postman Problems use an exact state-space search. The search has explicit edge and state limits because its state count grows exponentially.
 - Larger Rural Postman Problems use the MST/CPP heuristic described in [`docs/ALGORITHMS.md`](docs/ALGORITHMS.md).
-- Fourier terms are ordered by coefficient energy. The saved RMS error is calculated from the omitted coefficient energy, and the renderer displays the progressive approximation.
-- X and Y are transformed as separate real signals. Their harmonic orders are ranked independently; both partial sums combine to place the live point on the drawing.
+- X and Y are transformed as separate real signals and paired by the same ascending frequency. Each stage adds the next frequency to both axes, so the first pair traces an ellipse. The saved RMS error is calculated from the omitted coefficient energy for that frequency prefix.
 - A raster skeleton is a pixel-level estimate of a centerline. Thick, touching, noisy, or ambiguous strokes can change the extracted topology; inspect the NPZ masks and rendered comparison when an input looks unexpected.
 
 See [`docs/TEST_PLAN.md`](docs/TEST_PLAN.md) for solver and renderer test coverage.

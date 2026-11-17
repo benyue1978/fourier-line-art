@@ -46,7 +46,8 @@ scalable general-purpose RPP implementation.
 | Constant and single rotating term | Correct coefficients and reconstruction |
 | Full set of DFT terms | Reconstructs all input samples within floating-point tolerance |
 | Increasing term count | Orthogonal partial reconstruction RMS does not increase |
-| Real coordinate signals | Conjugate pairs produce amplitude/phase harmonics; independent x/y errors match direct RMS |
+| Real coordinate signals | Conjugate pairs produce amplitude/phase harmonics; frequency-prefix errors match direct RMS |
+| Paired coordinate terms | X and Y share ascending frequencies; the first same-frequency pair traces an ellipse |
 | Invalid term count or empty input | Clear validation error |
 | Multiple channels | Parseval error curve agrees with direct RMS computation |
 
@@ -78,15 +79,16 @@ are equally valid.
 
 - The renderer loads only the documented NPZ fields and rejects missing fields
   or unsupported schema versions.
-- X and Y harmonic arrays load independently; schema v1 results can be upgraded
-  from their saved route samples.
+- X and Y harmonic arrays share ascending frequencies; schema v1/v2 results can
+  be upgraded from their saved route samples.
 - Fourier display stages are unique, increasingly dense, and end at the full
   term count.
 - With Matplotlib and FFmpeg installed, a low-resolution integration render
-  produces a non-empty 9:16 MP4. Manual review checks early, middle, high-term,
-  and final frames for clipping, X/Y chain scale against source width/height,
-  dashed guides joining each wheel endpoint to the map tip, hidden pen-up travel,
-  route alignment, and the error readout.
+  produces a non-empty 9:16 MP4. Geometry tests verify fixed wheel centers,
+  direct same-coordinate alignment, and vertical/horizontal projections from
+  the actual wheel endpoints to the map point. Manual review checks first-term,
+  middle, high-term, and final frames for clipping, wheel scale, ellipse
+  behavior, hidden pen-up travel, route alignment, and the error readout.
 
 ## Running tests
 

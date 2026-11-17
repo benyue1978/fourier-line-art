@@ -9,7 +9,7 @@ from fourier_line_art.pipeline import solve_image
 from fourier_line_art.rendering import (
     RenderInputError,
     _chain_extent,
-    _evaluate_axis,
+    _coordinate_guides,
     _scene_bounds,
     load_render_data,
     render_video,
@@ -55,6 +55,8 @@ def test_load_render_data_reads_npz_and_rejects_invalid_schema(tmp_path):
     assert loaded.term_count == 16
     assert loaded.sample_count == 32
     assert loaded.skeleton.ndim == 2
+    np.testing.assert_array_equal(loaded.x_frequencies, loaded.y_frequencies)
+    np.testing.assert_array_equal(loaded.x_frequencies, np.arange(1, loaded.term_count + 1))
 
     missing_fields = tmp_path / "missing-fields.npz"
     np.savez(missing_fields, metadata_json=np.asarray(json.dumps({"schema_version": 1})))
@@ -79,31 +81,52 @@ def test_load_render_data_reads_npz_and_rejects_invalid_schema(tmp_path):
 
 def test_scene_bounds_scale_both_wheels_in_source_pixel_units(tmp_path):
     data = load_render_data(_make_solver_result(tmp_path))
-    levels = stage_schedule(data.term_count)
-    times = np.linspace(0.0, 1.0, 257)
-    curves = {
-        count: (
-            _evaluate_axis(data.x_mean, data.x_frequencies, data.x_amplitudes,
-                           data.x_phases, times, count),
-            _evaluate_axis(data.y_mean, data.y_frequencies, data.y_amplitudes,
-                           data.y_sine_phases, times, count, sine=True),
-        )
-        for count in levels
-    }
     map_width = 3.5
     map_scale = map_width / data.skeleton.shape[1]
     map_height = data.skeleton.shape[0] * map_scale
 
-    scene = _scene_bounds(data, levels, curves, times, map_scale, map_width, map_height)
+    scene = _scene_bounds(data, map_scale, map_width, map_height)
+    x_extent = _chain_extent(data.x_frequencies, data.x_amplitudes, data.x_phases) * map_scale
+    y_extent = _chain_extent(data.y_frequencies, data.y_amplitudes, data.y_sine_phases) * map_scale
 
-    assert scene[4] == pytest.approx(
-        -_chain_extent(data.x_frequencies, data.x_amplitudes, data.x_phases) * map_scale - 0.18
-    )
-    assert scene[5] == pytest.approx(
-        -_chain_extent(data.y_frequencies, data.y_amplitudes, data.y_sine_phases) * map_scale - 0.18
-    )
+    assert scene[4] == pytest.approx(data.x_mean * map_scale)
+    assert scene[5] == pytest.approx(-x_extent - 0.18)
+    assert scene[6] == pytest.approx(-y_extent - 0.18)
+    assert scene[7] == pytest.approx(data.y_mean * map_scale)
+    assert scene[8] == pytest.approx(x_extent)
+    assert scene[9] == pytest.approx(y_extent)
+    assert scene[0] < scene[6] - y_extent
+    assert scene[2] < scene[5] - x_extent
     assert scene[0] < 0 < map_width < scene[1]
     assert scene[2] < 0 < map_height < scene[3]
+
+
+def test_coordinate_guides_are_perpendicular_and_join_wheels_to_map(tmp_path):
+    data = load_render_data(_make_solver_result(tmp_path))
+    map_scale = 3.5 / data.skeleton.shape[1]
+    _, _, _, _, x_center_x, x_center_y, y_center_x, y_center_y, _, _ = _scene_bounds(
+        data, map_scale, 3.5, 3.5
+    )
+    map_point = (x_center_x + 0.31, y_center_y + 0.42)
+    x_tip = (map_point[0], x_center_y - 0.17)
+    y_tip = (y_center_x + 0.12, map_point[1])
+
+    guides = _coordinate_guides(x_tip, y_tip, map_point)
+
+    x_guide_x, x_guide_y = guides["x"]
+    assert x_guide_x[0] == x_guide_x[1]  # vertical to the horizontal X axis
+    assert (x_guide_x[0], x_guide_y[0]) == pytest.approx(x_tip)
+    assert (x_guide_x[1], x_guide_y[1]) == pytest.approx(map_point)
+
+    y_guide_x, y_guide_y = guides["y"]
+    assert y_guide_y[0] == y_guide_y[1]  # horizontal to the vertical Y axis
+    assert (y_guide_x[0], y_guide_y[0]) == pytest.approx(y_tip)
+    assert (y_guide_x[1], y_guide_y[1]) == pytest.approx(map_point)
+
+    with pytest.raises(ValueError, match="do not share an x coordinate"):
+        _coordinate_guides((x_tip[0] + 0.1, x_tip[1]), y_tip, map_point)
+    with pytest.raises(ValueError, match="do not share a y coordinate"):
+        _coordinate_guides(x_tip, (y_tip[0], y_tip[1] - 0.1), map_point)
 
 
 @pytest.mark.skipif(shutil.which("ffmpeg") is None, reason="FFmpeg is needed for MP4 output")

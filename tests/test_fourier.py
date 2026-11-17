@@ -116,6 +116,58 @@ def test_real_fourier_errors_match_direct_rms_and_never_increase():
         atol=1e-12,
     )
 
+    frequency_errors = series.frequency_ordered_rms_errors()
+    direct_errors = []
+    for count in range(series.term_count + 1):
+        if count == 0:
+            reconstructed = np.full(times.shape, series.mean)
+        else:
+            angles = (
+                2 * np.pi * series.frequency_ordered_frequencies[:count, None]
+                * times[None, :]
+                + series.frequency_ordered_phases[:count, None]
+            )
+            reconstructed = series.mean + np.sum(
+                series.frequency_ordered_amplitudes[:count, None] * np.cos(angles),
+                axis=0,
+            )
+        direct_errors.append(np.sqrt(np.mean((samples - reconstructed) ** 2)))
+    np.testing.assert_allclose(frequency_errors, direct_errors, atol=1e-12)
+
+
+def test_first_paired_frequency_reconstructs_an_ellipse():
+    times = np.arange(256) / 256
+    phase = 0.37
+    x_mean, y_mean = 31.0, 27.0
+    x_radius, y_radius = 17.0, 11.0
+    x_samples = x_mean + x_radius * np.cos(2 * np.pi * times + phase)
+    y_samples = y_mean + y_radius * np.sin(2 * np.pi * times + phase)
+    x_series = RealFourierSeries.from_samples(x_samples)
+    y_series = RealFourierSeries.from_samples(y_samples)
+
+    np.testing.assert_array_equal(
+        x_series.frequency_ordered_frequencies,
+        y_series.frequency_ordered_frequencies,
+    )
+    assert x_series.frequency_ordered_frequencies[0] == 1
+    x_first = (
+        x_series.mean
+        + x_series.frequency_ordered_amplitudes[0]
+        * np.cos(2 * np.pi * times + x_series.frequency_ordered_phases[0])
+    )
+    y_first = (
+        y_series.mean
+        + y_series.frequency_ordered_amplitudes[0]
+        * np.sin(
+            2 * np.pi * times
+            + y_series.frequency_ordered_phases[0]
+            + np.pi / 2
+        )
+    )
+    normalized_x = (x_first - x_mean) / x_radius
+    normalized_y = (y_first - y_mean) / y_radius
+    np.testing.assert_allclose(normalized_x**2 + normalized_y**2, 1.0, atol=1e-12)
+
 
 def test_real_fourier_rejects_complex_signal():
     with pytest.raises(FourierValidationError, match="real-valued"):

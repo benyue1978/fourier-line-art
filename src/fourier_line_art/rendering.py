@@ -48,20 +48,20 @@ class RenderData:
 
 
 def _axis_values_from_series(series: RealFourierSeries, *, y_axis: bool = False):
-    phases = series.ordered_phases
+    phases = series.frequency_ordered_phases
     if y_axis:
         phases = phases + np.pi / 2
     return (
         series.mean,
-        series.ordered_frequencies,
-        series.ordered_amplitudes,
+        series.frequency_ordered_frequencies,
+        series.frequency_ordered_amplitudes,
         phases,
-        series.rms_errors(),
+        series.frequency_ordered_rms_errors(),
     )
 
 
 def load_render_data(npz_path: str | Path) -> RenderData:
-    """Load a solver NPZ, supporting schema v1 and the separate-axis v2."""
+    """Load schema v1/v2 results and frequency-paired schema v3 results."""
     path = Path(npz_path)
     try:
         with np.load(path, allow_pickle=False) as archive:
@@ -72,10 +72,10 @@ def load_render_data(npz_path: str | Path) -> RenderData:
             except (TypeError, ValueError, json.JSONDecodeError) as exc:
                 raise RenderInputError("NPZ metadata_json is invalid") from exc
             schema = metadata.get("schema_version")
-            if schema not in (1, 2):
+            if schema not in (1, 2, 3):
                 raise RenderInputError(f"unsupported result schema version: {schema!r}")
             required = {"skeleton", "samples_xyz", "draw_mask"}
-            if schema == 2:
+            if schema in (2, 3):
                 required.update({
                     "x_mean", "x_frequencies", "x_amplitudes", "x_phases", "x_rms_errors",
                     "y_mean", "y_frequencies", "y_amplitudes", "y_sine_phases", "y_rms_errors",
@@ -89,7 +89,7 @@ def load_render_data(npz_path: str | Path) -> RenderData:
             skeleton = np.array(archive["skeleton"], dtype=bool, copy=True)
             samples = np.array(archive["samples_xyz"], dtype=np.float64, copy=True)
             draw_mask = np.array(archive["draw_mask"], dtype=bool, copy=True)
-            if schema == 2:
+            if schema == 3:
                 axis_data = (
                     float(archive["x_mean"]),
                     np.array(archive["x_frequencies"], dtype=np.int64, copy=True),
@@ -125,6 +125,10 @@ def load_render_data(npz_path: str | Path) -> RenderData:
     term_count = len(x_freq)
     if term_count < 1 or len(y_freq) != term_count:
         raise RenderInputError("x and y must have the same positive harmonic count")
+    if not np.array_equal(x_freq, y_freq):
+        raise RenderInputError("x and y harmonics must be paired at the same frequencies")
+    if not np.array_equal(x_freq, np.arange(1, term_count + 1)):
+        raise RenderInputError("coordinate harmonics must be ordered by ascending frequency")
     for name, frequencies, amplitudes, phases, errors in (
         ("x", x_freq, x_amp, x_phase, x_err),
         ("y", y_freq, y_amp, y_phase, y_err),
@@ -202,60 +206,35 @@ def _chain_extent(frequencies, amplitudes, phases) -> float:
     return max(float(np.max(np.abs(starts) + amplitudes[:, None])), 1e-12)
 
 
-def _scene_bounds(data, levels, stage_curves, times, map_scale, map_width, map_height):
-    """Fit the map and both dimension-scaled wheel chains without excess margins."""
+def _scene_bounds(data, map_scale, map_width, map_height):
+    """Fit fixed wheels on the map's own coordinate axes, with no origin shifts."""
     x_extent = _chain_extent(data.x_frequencies, data.x_amplitudes, data.x_phases) * map_scale
     y_extent = _chain_extent(data.y_frequencies, data.y_amplitudes, data.y_sine_phases) * map_scale
-    x_center_x = -x_extent - 0.18
-    y_center_y = -y_extent - 0.18
-    bounds = [0.0, map_width, 0.0, map_height]
-
-    for count in levels:
-        x_curve, y_curve = stage_curves[count]
-        map_x, map_y = x_curve * map_scale, y_curve * map_scale
-
-        x_vectors = data.x_amplitudes[:count, None] * np.exp(
-            2j * np.pi * data.x_frequencies[:count, None] * times[None, :]
-            + 1j * data.x_phases[:count, None]
-        )
-        x_prefix = np.concatenate(
-            (np.zeros((1, len(times)), dtype=np.complex128), np.cumsum(x_vectors, axis=0)),
-            axis=0,
-        ) * map_scale
-        x_radii = data.x_amplitudes[:count, None] * map_scale
-        x_centers = np.stack((
-            x_center_x + x_prefix[:-1].real,
-            map_y[None, :] - x_prefix[-1].imag + x_prefix[:-1].imag,
-        ))
-        bounds[0] = min(bounds[0], float(np.min(x_centers[0] - x_radii)))
-        bounds[1] = max(bounds[1], float(np.max(x_centers[0] + x_radii)))
-        bounds[2] = min(bounds[2], float(np.min(x_centers[1] - x_radii)))
-        bounds[3] = max(bounds[3], float(np.max(x_centers[1] + x_radii)))
-
-        y_vectors = data.y_amplitudes[:count, None] * np.exp(
-            2j * np.pi * data.y_frequencies[:count, None] * times[None, :]
-            + 1j * data.y_sine_phases[:count, None]
-        )
-        y_prefix = np.concatenate(
-            (np.zeros((1, len(times)), dtype=np.complex128), np.cumsum(y_vectors, axis=0)),
-            axis=0,
-        ) * map_scale
-        y_radii = data.y_amplitudes[:count, None] * map_scale
-        y_centers = np.stack((
-            map_x[None, :] - y_prefix[-1].real + y_prefix[:-1].real,
-            y_center_y + y_prefix[:-1].imag,
-        ))
-        bounds[0] = min(bounds[0], float(np.min(y_centers[0] - y_radii)))
-        bounds[1] = max(bounds[1], float(np.max(y_centers[0] + y_radii)))
-        bounds[2] = min(bounds[2], float(np.min(y_centers[1] - y_radii)))
-        bounds[3] = max(bounds[3], float(np.max(y_centers[1] + y_radii)))
-
-    margin = 0.18
-    return (
-        bounds[0] - margin, bounds[1] + margin,
-        bounds[2] - margin, bounds[3] + margin,
-        x_center_x, y_center_y, x_extent, y_extent,
+    x_center = (data.x_mean * map_scale, -x_extent - 0.18)
+    y_center = (-y_extent - 0.18, data.y_mean * map_scale)
+    bounds = (
+        min(0.0, x_center[0] - x_extent, y_center[0] - y_extent) - 0.48,
+        max(map_width, x_center[0] + x_extent, y_center[0] + y_extent) + 0.30,
+        min(0.0, x_center[1] - x_extent, y_center[1] - y_extent) - 0.48,
+        max(map_height, x_center[1] + x_extent, y_center[1] + y_extent) + 0.30,
     )
+    return (
+        *bounds,
+        *x_center, *y_center, x_extent, y_extent,
+    )
+
+
+def _coordinate_guides(x_tip, y_tip, map_point):
+    """Return direct orthogonal links when each wheel shares the map's axes."""
+    map_x, map_y = map_point
+    if not np.isclose(x_tip[0], map_x, rtol=1e-10, atol=1e-10):
+        raise ValueError("X wheel endpoint and map point do not share an x coordinate")
+    if not np.isclose(y_tip[1], map_y, rtol=1e-10, atol=1e-10):
+        raise ValueError("Y wheel endpoint and map point do not share a y coordinate")
+    return {
+        "x": ((map_x, map_x), (x_tip[1], map_y)),
+        "y": ((y_tip[0], map_x), (map_y, map_y)),
+    }
 
 
 def render_video(
@@ -323,8 +302,8 @@ def render_video(
     }
     (
         scene_x_min, scene_x_max, scene_y_min, scene_y_max,
-        x_center_x, y_center_y, x_extent, y_extent,
-    ) = _scene_bounds(data, levels, stage_curves, times, map_scale, map_width, map_height)
+        x_center_x, x_center_y, y_center_x, y_center_y, x_extent, y_extent,
+    ) = _scene_bounds(data, map_scale, map_width, map_height)
     diagonal = max(float(np.hypot(image_width, image_height)), 1.0)
     xy_errors = np.sqrt(data.x_rms_errors**2 + data.y_rms_errors**2)
     relative_errors = xy_errors / diagonal
@@ -358,12 +337,12 @@ def render_video(
     fig.add_artist(formula_box)
     fig.text(
         0.5, 0.916,
-        r"$x_N(t)=x_0+\sum_{j=1}^{N}R_{x,j}\cos(2\pi k_{x,j}t+\phi_{x,j})$",
+        r"$x_N(t)=x_0+\sum_{j=1}^{N}R_{x,j}\cos(2\pi k_jt+\phi_{x,j})$",
         ha="center", va="center", fontsize=13, color="#176B78",
     )
     fig.text(
         0.5, 0.848,
-        r"$y_N(t)=y_0+\sum_{j=1}^{N}R_{y,j}\sin(2\pi k_{y,j}t+\phi_{y,j})$",
+        r"$y_N(t)=y_0+\sum_{j=1}^{N}R_{y,j}\sin(2\pi k_jt+\phi_{y,j})$",
         ha="center", va="center", fontsize=13, color="#176B78",
     )
     x_numeric_formula = fig.text(0.5, 0.882, "", ha="center", va="center",
@@ -383,8 +362,8 @@ def render_video(
     # follows the source height.
     x_scale = map_scale
     y_scale = map_scale
-    x_center = (x_center_x, map_height * 0.5)
-    y_center = (map_width * 0.5, y_center_y)
+    x_center = (x_center_x, x_center_y)
+    y_center = (y_center_x, y_center_y)
 
     rgba = np.zeros((image_height, image_width, 4), dtype=np.float32)
     rgba[..., :3] = (0.18, 0.27, 0.32)
@@ -399,11 +378,12 @@ def render_video(
                                 solid_capstyle="round", zorder=3)
     map_point = main_ax.scatter([], [], s=24, color="#087EA4", edgecolors="white",
                                 linewidths=0.5, zorder=6)
-    # These two guides are coordinate projections to the active map point.
+    # X's fixed horizontal output axis is above the map; Y's fixed vertical
+    # output axis is left of it. Their projection coordinates are map x and y.
     (x_guide,) = main_ax.plot([], [], color="#4B9298", linewidth=1.15,
-                              linestyle=(0, (4, 3)), alpha=0.85, zorder=4)
+                              linestyle=(0, (4, 3)), alpha=0.9, zorder=4)
     (y_guide,) = main_ax.plot([], [], color="#4B9298", linewidth=1.15,
-                              linestyle=(0, (4, 3)), alpha=0.85, zorder=4)
+                              linestyle=(0, (4, 3)), alpha=0.9, zorder=4)
 
     def add_chain(frequencies, amplitudes, phases, center, scale, output_axis, color):
         vectors, circles = [], []
@@ -426,6 +406,16 @@ def render_video(
                         x_center, x_scale, "x", "#287B8E")
     y_chain = add_chain(data.y_frequencies, data.y_amplitudes, data.y_sine_phases,
                         y_center, y_scale, "y", "#2E8B78")
+    (x_axis,) = main_ax.plot(
+        [x_center[0] - x_extent, x_center[0] + x_extent],
+        [x_center[1], x_center[1]], color="#6F9FA0", linewidth=0.8,
+        alpha=0.7, zorder=2,
+    )
+    (y_axis,) = main_ax.plot(
+        [y_center[0], y_center[0]],
+        [y_center[1] - y_extent, y_center[1] + y_extent],
+        color="#6F9FA0", linewidth=0.8, alpha=0.7, zorder=2,
+    )
     x_label = main_ax.text(x_center[0], x_center[1] - x_extent - 0.12, "X 分量",
                            ha="center", va="bottom", fontsize=11,
                            fontweight="bold", color="#287B8E")
@@ -455,10 +445,10 @@ def render_video(
     error_ax.set_ylabel("项数", fontsize=7, color="#607D8B")
     for spine in error_ax.spines.values():
         spine.set_visible(False)
-    fig.text(0.5, 0.035, "蓝色 = 当前描线　·　灰色 = 原图中心线　·　虚线 = X/Y 坐标投影",
+    fig.text(0.5, 0.035, "蓝色 = 当前描线　·　灰色 = 原图中心线　·　虚线 = 直接坐标投影",
              ha="center", va="center", fontsize=8, color="#667F89")
 
-    def update_chain(chain, t, term_count, pen_point):
+    def update_chain(chain, t, term_count):
         frequencies = chain["frequencies"]
         amplitudes = chain["amplitudes"]
         phases = chain["phases"]
@@ -469,13 +459,7 @@ def render_video(
         prefix = np.concatenate(([0j], np.cumsum(rotated)))
         scale = chain["scale"]
         tip = prefix[-1] * scale
-        if chain["output_axis"] == "x":
-            center_x = chain["center"][0]
-            center_y = pen_point[1] - tip.imag
-        else:
-            center_x = pen_point[0] - tip.real
-            center_y = chain["center"][1]
-        chain["center"] = (center_x, center_y)
+        center_x, center_y = chain["center"]
         for index, (vector, circle) in enumerate(zip(chain["vectors"], chain["circles"])):
             if index >= active_count:
                 vector.set_visible(False)
@@ -506,20 +490,21 @@ def render_video(
         visible_end = max(1, int(progress * frame_count) + 1)
         partial_x, partial_y = x_curve[:visible_end] * map_scale, y_curve[:visible_end] * map_scale
         flags = draw_flags[:visible_end]
+        if term_count < data.term_count:
+            # Partial sums are continuous Fourier curves. At full precision,
+            # use the source lift mask to hide travel between separate strokes.
+            flags = np.ones_like(flags, dtype=bool)
         map_trace.set_data(np.where(flags, partial_x, np.nan), np.where(flags, partial_y, np.nan))
 
         time_index = min(visible_end - 1, len(times) - 1)
         point_x, point_y = float(x_curve[time_index] * map_scale), float(y_curve[time_index] * map_scale)
         map_point.set_offsets([[point_x, point_y]])
         t = float(times[time_index])
-        x_tip = update_chain(x_chain, t, term_count, (point_x, point_y))
-        y_tip = update_chain(y_chain, t, term_count, (point_x, point_y))
-        # The horizontal X guide begins at the moving point on the left wheel;
-        # the vertical Y guide begins at the moving point on the upper wheel.
-        x_guide.set_data([x_tip[0], point_x], [point_y, point_y])
-        y_guide.set_data([point_x, point_x], [y_tip[1], point_y])
-        x_label.set_position((x_chain["center"][0], x_chain["center"][1] - x_extent - 0.12))
-        y_label.set_position((y_chain["center"][0], y_chain["center"][1] - y_extent - 0.12))
+        x_tip = update_chain(x_chain, t, term_count)
+        y_tip = update_chain(y_chain, t, term_count)
+        guides = _coordinate_guides(x_tip, y_tip, (point_x, point_y))
+        x_guide.set_data(*guides["x"])
+        y_guide.set_data(*guides["y"])
 
         x_norm = float(x_curve[time_index] / max(image_width - 1, 1))
         y_norm = float(y_curve[time_index] / max(image_height - 1, 1))
@@ -533,11 +518,12 @@ def render_video(
         ))
         relative_error = float(relative_errors[term_count] * 100)
         absolute_error = float(xy_errors[term_count])
-        formula_state.set_text(f"N = {term_count} / {data.term_count} 项　·　X、Y 分量分别排序")
+        formula_state.set_text(f"N = {term_count} / {data.term_count} 项　·　X、Y 同频成对增加")
         point_text.set_text(f"实时笔尖 ({x_norm:.2f}, {y_norm:.2f})")
         error_readout.set_text(f"{relative_error:.2f}%  ({absolute_error:.2f} px)")
         error_marker.set_data([term_count], [relative_error])
-        return [map_trace, map_point, x_guide, y_guide, formula_state, point_text,
+        return [map_trace, map_point, x_axis, y_axis, x_guide, y_guide,
+                formula_state, point_text,
                 x_numeric_formula, y_numeric_formula,
                 error_readout, error_marker, x_label, y_label,
                 *x_chain["vectors"], *x_chain["circles"], x_chain["endpoint"],
