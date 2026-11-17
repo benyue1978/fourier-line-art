@@ -20,7 +20,7 @@ Solve the sample image into a renderer-neutral `.npz` file:
 fourier-line-art examples/demo_smiley.png \
   --output build/smiley.npz \
   --connectivity 8 \
-  --samples 256
+  --samples 512
 ```
 
 Render that result as a 9:16, 1080 × 1920, 30 fps MP4:
@@ -30,7 +30,7 @@ fourier-line-art-render build/smiley.npz \
   --output build/smiley-portrait.mp4
 ```
 
-The default video shows increasing Fourier term counts (1, 2, 4, 8, …, all terms). Each stage traces one complete period. The final stage holds on the full reconstruction. For a faster preview, render smaller dimensions and fewer frames per second:
+The default video is about 14 seconds. With 512 route samples, each coordinate has 256 harmonics. The video uses progressively denser counts (1, 2, 3, 4, 6, 8, 12, …, 256), animating a full period for 0.8 seconds at each stage before holding on the final reconstruction. For a faster preview, render smaller dimensions and fewer frames per second:
 
 ```bash
 fourier-line-art-render build/smiley.npz \
@@ -43,9 +43,9 @@ Open the MP4 in a desktop video player or copy it to a phone. The file uses H.26
 
 ## What the video shows
 
-- **Formula card:** the partial Fourier sum and the current term count `N`.
-- **Upper panel:** the extracted centerline in gray and its current Fourier reconstruction in blue. Orange dashed parts show pen-up travel between strokes.
-- **Lower panel:** up to 24 rotating Fourier circles and the endpoint trail. When more terms are active, the remaining sum appears as an orange dashed vector; the trail and error still use the complete `N`-term reconstruction.
+- **One combined diagram:** the X circle chain is on the left, the Y circle chain is above, and the source drawing with its current blue reconstruction is on the right. Both component sums control the map's current pen point.
+- **Formula card:** separate real Fourier formulas for `x_N(t)` and `y_N(t)`, plus the live normalized pen-tip coordinate and current term count `N`.
+- **XY guides:** horizontal and vertical dashed projections locate the current point in the source drawing. Pen-up travel between strokes is hidden; it does not appear as a connecting line.
 - **Error graph:** relative XY RMS error versus term count. The readout gives both the relative error and the pixel-space RMS error for the current stage.
 
 The NPZ is also useful without rendering: it contains the source masks, sampled `(x, y, height)` route, draw-state mask, ordered Fourier frequencies and coefficients, RMS errors, and solver metadata. Inspect its metadata with:
@@ -58,7 +58,8 @@ import numpy as np
 with np.load("build/smiley.npz", allow_pickle=False) as result:
     print(json.loads(str(result["metadata_json"])))
     print("route samples:", result["samples_xyz"].shape)
-    print("Fourier terms:", result["xy_coefficients"].shape[0])
+    print("X harmonics:", result["x_amplitudes"].shape[0])
+    print("Y harmonics:", result["y_amplitudes"].shape[0])
 PY
 ```
 
@@ -85,7 +86,7 @@ Useful solver options:
 | `--threshold` | `128` | Grayscale threshold from 0 to 255 |
 | `--invert` | off | Use light pixels as foreground |
 | `--connectivity` | `8` | Pixel-neighbor connectivity, 4 or 8 |
-| `--samples` | `512` | Uniform route samples and Fourier terms |
+| `--samples` | `512` | Uniform route samples; 256 positive-frequency harmonics per coordinate at this size |
 | `--lift-height` | `1.0` | Height assigned to pen-down travel in the 3D route model |
 | `--max-rpp-required-edges` | `15` | Required-edge limit for exact disconnected-route solving |
 | `--max-rpp-states` | `2000000` | State limit for the exact rural postman search |
@@ -145,6 +146,7 @@ The renderer reads only the versioned NPZ result. This keeps image solving and r
 - Small Rural Postman Problems use an exact state-space search. The search has explicit edge and state limits because its state count grows exponentially.
 - Larger Rural Postman Problems use the MST/CPP heuristic described in [`docs/ALGORITHMS.md`](docs/ALGORITHMS.md).
 - Fourier terms are ordered by coefficient energy. The saved RMS error is calculated from the omitted coefficient energy, and the renderer displays the progressive approximation.
+- X and Y are transformed as separate real signals. Their harmonic orders are ranked independently; both partial sums combine to place the live point on the drawing.
 - A raster skeleton is a pixel-level estimate of a centerline. Thick, touching, noisy, or ambiguous strokes can change the extracted topology; inspect the NPZ masks and rendered comparison when an input looks unexpected.
 
 See [`docs/TEST_PLAN.md`](docs/TEST_PLAN.md) for solver and renderer test coverage.

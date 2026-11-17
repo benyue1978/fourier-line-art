@@ -46,6 +46,7 @@ scalable general-purpose RPP implementation.
 | Constant and single rotating term | Correct coefficients and reconstruction |
 | Full set of DFT terms | Reconstructs all input samples within floating-point tolerance |
 | Increasing term count | Orthogonal partial reconstruction RMS does not increase |
+| Real coordinate signals | Conjugate pairs produce amplitude/phase harmonics; independent x/y errors match direct RMS |
 | Invalid term count or empty input | Clear validation error |
 | Multiple channels | Parseval error curve agrees with direct RMS computation |
 
@@ -70,18 +71,21 @@ are equally valid.
 - The resulting route is closed, has draw and pen-up samples, and yields
   monotone XY/height RMS curves.
 - NPZ output contains masks, route samples, ordered Fourier frequencies and
-  coefficients, error arrays, and schema-versioned metadata.
+  coefficients, separate x/y real harmonics, error arrays, and schema-versioned
+  metadata.
 
 ## Video renderer
 
 - The renderer loads only the documented NPZ fields and rejects missing fields
   or unsupported schema versions.
-- Fourier display stages are unique, strictly increasing, and end at the full
+- X and Y harmonic arrays load independently; schema v1 results can be upgraded
+  from their saved route samples.
+- Fourier display stages are unique, increasingly dense, and end at the full
   term count.
 - With Matplotlib and FFmpeg installed, a low-resolution integration render
   produces a non-empty 9:16 MP4. Manual review checks early, middle, high-term,
-  and final frames for clipping, formula readability, route alignment, and the
-  error readout.
+  and final frames for clipping, separate X/Y chains, coordinate guides, hidden
+  pen-up travel, route alignment, and the error readout.
 
 ## Running tests
 

@@ -9,7 +9,7 @@ from pathlib import Path
 
 import numpy as np
 
-from .fourier import FourierSeries
+from .fourier import FourierSeries, RealFourierSeries
 from .image import ImageAnalysis, ImageInputError, analyze_image
 from .models import Route
 from .routes import RouteSamples, add_pen_up_candidates, polyline_from_route
@@ -28,6 +28,8 @@ class SolveResult:
     route: Route
     samples: RouteSamples
     xy_series: FourierSeries
+    x_series: RealFourierSeries
+    y_series: RealFourierSeries
     height_series: FourierSeries
     xy_rms_errors: np.ndarray
     height_rms_errors: np.ndarray
@@ -46,7 +48,7 @@ class SolveResult:
         output_path = Path(output_path)
         output_path.parent.mkdir(parents=True, exist_ok=True)
         metadata = {
-            "schema_version": 1,
+            "schema_version": 2,
             "solver": self.solver_name,
             "required_edge_count": sum(edge.required for edge in self.analysis.graph.edges),
             "graph_edge_count": len(self.analysis.graph.edges),
@@ -55,11 +57,12 @@ class SolveResult:
             "route_closed": self.route.is_closed,
             "sample_count": int(len(self.samples.points)),
             "fourier_term_count": self.term_count,
+            "coordinate_harmonic_count": self.x_series.term_count,
             "threshold": self.threshold,
             "invert": self.invert,
             "connectivity": self.analysis.connectivity,
             "lift_height": self.lift_height,
-            "xy_convention": "z(t) = x(t) + i*y(t); frequencies are cycles per period",
+            "xy_convention": "separate real x cosine and y sine harmonics; cycles per period",
         }
         with output_path.open("wb") as output:
             np.savez_compressed(
@@ -72,6 +75,16 @@ class SolveResult:
                 draw_mask=self.samples.draw,
                 xy_frequencies=self.xy_series.ordered_frequencies,
                 xy_coefficients=self.xy_series.ordered_coefficients,
+                x_mean=np.asarray(self.x_series.mean),
+                x_frequencies=self.x_series.ordered_frequencies,
+                x_amplitudes=self.x_series.ordered_amplitudes,
+                x_phases=self.x_series.ordered_phases,
+                x_rms_errors=self.x_series.rms_errors(),
+                y_mean=np.asarray(self.y_series.mean),
+                y_frequencies=self.y_series.ordered_frequencies,
+                y_amplitudes=self.y_series.ordered_amplitudes,
+                y_sine_phases=self.y_series.ordered_phases + np.pi / 2,
+                y_rms_errors=self.y_series.rms_errors(),
                 height_frequencies=self.height_series.ordered_frequencies,
                 height_coefficients=self.height_series.ordered_coefficients,
                 xy_rms_errors=self.xy_rms_errors,
@@ -130,6 +143,8 @@ def solve_image(
     samples = polyline.resample(sample_count)
     xy_signal = samples.points[:, 0] + 1j * samples.points[:, 1]
     xy_series = FourierSeries.from_samples(xy_signal)
+    x_series = RealFourierSeries.from_samples(samples.points[:, 0])
+    y_series = RealFourierSeries.from_samples(samples.points[:, 1])
     height_series = FourierSeries.from_samples(samples.points[:, 2])
     xy_errors = xy_series.rms_errors()
     height_errors = height_series.rms_errors()
@@ -145,6 +160,8 @@ def solve_image(
         route=route,
         samples=samples,
         xy_series=xy_series,
+        x_series=x_series,
+        y_series=y_series,
         height_series=height_series,
         xy_rms_errors=xy_errors,
         height_rms_errors=height_errors,

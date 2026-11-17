@@ -51,26 +51,33 @@ the image pipeline does not assert optimality for this fallback.
 
 ## Fourier series and errors
 
-The closed 3D route is resampled at uniform arc length. XY is represented as
-`z(t) = x(t) + i*y(t)`; height is a separate real-valued sample channel. DFT
-coefficients use the `1/N` normalization and integer frequencies in cycles per
-period. Terms are ordered by coefficient energy, so each nested complex-signal
-truncation has non-increasing sample RMS by Parseval's identity. The NPZ output
-stores ordered frequencies and coefficients for both channels, the source
-draw mask, samples, and RMS curves.
+The closed 3D route is resampled at uniform arc length. The solver keeps the
+complex `z(t) = x(t) + i*y(t)` series and also decomposes the real x and y
+signals independently. Each real series stores its mean and positive-frequency
+harmonics as amplitude/phase terms. Conjugate frequency pairs become one cosine
+harmonic; the y phase is shifted by π/2 when expressed as a sine. Terms are
+ranked by the energy they contribute to sample RMS, and each coordinate's
+partial error is computed from the omitted energy. The NPZ stores the source
+draw mask, 3D samples, complex coefficients, and separate x/y amplitudes,
+phases, frequencies, and error curves.
 
 ## Portrait video
 
-`fourier-line-art-render` reads the schema-versioned NPZ, displays the source
-skeleton and current partial reconstruction, and animates the Fourier vector
-chain through one period at each increasing term count. It renders up to 24
-individual rotating circles; when the reconstruction uses more terms, their
-remaining vector sum is shown as a dashed resultant so the full endpoint and
-trace remain exact without filling the phone-sized frame with hundreds of
-unreadable circles. The error plot and readout use the full active term count.
-The current backend uses Matplotlib and FFmpeg to write H.264 `yuv420p` MP4 at
-9:16 by default. It can be replaced or supplemented without changing the
-solver or the NPZ contract.
+`fourier-line-art-render` reads the schema-versioned NPZ and creates one
+composite diagram: X's epicycle chain sits to the left of the source drawing,
+Y's chain sits above it, and their partial sums place the live point. Horizontal
+and vertical dashed guides project that point's x/y coordinates. They are
+coordinate guides; pen-up travel between drawing strokes is omitted from the
+visible route. The blue trace is gated by the source draw mask, while both
+Fourier chains continue to animate.
+
+The default 512 route samples produce 256 positive-frequency harmonics per
+coordinate. Term counts follow a denser milestone sequence from 1 through 256,
+with a full period at each stage and 0.8 seconds per stage. The error graph uses
+the combined XY RMS error for the same active harmonic count. The current
+backend uses Matplotlib and FFmpeg to write H.264 `yuv420p` MP4 at 9:16 by
+default. It can be replaced or supplemented without changing the solver or the
+NPZ contract.
 
 The exact RPP state search is suitable for testing and small inputs, not large
 maps. The fallback has no optimality guarantee for a general image-derived

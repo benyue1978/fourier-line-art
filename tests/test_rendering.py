@@ -18,8 +18,8 @@ from fourier_line_art.rendering import (
     ("term_count", "expected"),
     [
         (1, (1,)),
-        (7, (1, 2, 4, 7)),
-        (16, (1, 2, 4, 8, 16)),
+        (7, (1, 2, 3, 4, 6, 7)),
+        (16, (1, 2, 3, 4, 6, 8, 12, 16)),
     ],
 )
 def test_stage_schedule_includes_full_precision_once(term_count, expected):
@@ -49,7 +49,7 @@ def _make_solver_result(tmp_path):
 def test_load_render_data_reads_npz_and_rejects_invalid_schema(tmp_path):
     result_path = _make_solver_result(tmp_path)
     loaded = load_render_data(result_path)
-    assert loaded.term_count == 32
+    assert loaded.term_count == 16
     assert loaded.sample_count == 32
     assert loaded.skeleton.ndim == 2
 

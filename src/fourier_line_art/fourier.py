@@ -156,3 +156,137 @@ class FourierSeries:
         errors.setflags(write=False)
         return errors
 
+
+@dataclass(frozen=True, slots=True)
+class RealFourierSeries:
+    """A real signal represented by an offset and ordered cosine harmonics.
+
+    Positive-frequency conjugate pairs are combined into a single cosine
+    component. The Nyquist component, when present, is kept at its correct
+    single-sided amplitude. Harmonics are ordered by their contribution to
+    sample-space squared error.
+    """
+
+    _samples: np.ndarray
+    mean: float
+    _frequencies: np.ndarray
+    _amplitudes: np.ndarray
+    _phases: np.ndarray
+    _energies: np.ndarray
+    _order: tuple[int, ...]
+
+    @classmethod
+    def from_samples(cls, samples) -> "RealFourierSeries":
+        values = np.asarray(samples)
+        if values.ndim != 1 or values.shape[0] == 0:
+            raise FourierValidationError("real samples must be a non-empty 1D array")
+        if not np.issubdtype(values.dtype, np.number):
+            raise FourierValidationError("samples must be numeric")
+        if not np.all(np.isfinite(values)):
+            raise FourierValidationError("samples must be finite")
+        if np.iscomplexobj(values) and np.any(np.imag(values) != 0):
+            raise FourierValidationError("RealFourierSeries requires real-valued samples")
+
+        values = np.array(np.real(values), dtype=np.float64, copy=True)
+        sample_count = len(values)
+        coefficients = np.fft.rfft(values) / sample_count
+        maximum_frequency = sample_count // 2
+        frequencies = np.arange(1, maximum_frequency + 1, dtype=np.int64)
+        amplitudes = 2 * np.abs(coefficients[1 : maximum_frequency + 1])
+        phases = np.angle(coefficients[1 : maximum_frequency + 1])
+        is_nyquist = sample_count % 2 == 0 and maximum_frequency > 0
+        if is_nyquist:
+            amplitudes[-1] /= 2
+
+        energies = amplitudes**2 / 2
+        if is_nyquist:
+            energies[-1] = amplitudes[-1] ** 2
+        order = tuple(
+            sorted(
+                range(len(frequencies)),
+                key=lambda index: (
+                    -float(energies[index]),
+                    int(frequencies[index]),
+                ),
+            )
+        )
+        mean = float(coefficients[0].real)
+        for array in (values, frequencies, amplitudes, phases, energies):
+            array.setflags(write=False)
+        return cls(values, mean, frequencies, amplitudes, phases, energies, order)
+
+    @property
+    def sample_count(self) -> int:
+        return int(len(self._samples))
+
+    @property
+    def term_count(self) -> int:
+        return len(self._order)
+
+    @property
+    def ordered_frequencies(self) -> np.ndarray:
+        values = self._frequencies[list(self._order)]
+        values.setflags(write=False)
+        return values
+
+    @property
+    def ordered_amplitudes(self) -> np.ndarray:
+        values = self._amplitudes[list(self._order)]
+        values.setflags(write=False)
+        return values
+
+    @property
+    def ordered_phases(self) -> np.ndarray:
+        values = self._phases[list(self._order)]
+        values.setflags(write=False)
+        return values
+
+    def evaluate(self, t, term_count: int) -> np.ndarray:
+        """Evaluate the offset plus the requested highest-energy harmonics."""
+        if (
+            isinstance(term_count, bool)
+            or not isinstance(term_count, Integral)
+            or not 0 <= term_count <= self.term_count
+        ):
+            raise FourierValidationError(
+                f"term_count must be an integer between 0 and {self.term_count}"
+            )
+        try:
+            times = np.asarray(t, dtype=float)
+        except (TypeError, ValueError) as exc:
+            raise FourierValidationError("t must contain finite numeric values") from exc
+        if not np.all(np.isfinite(times)):
+            raise FourierValidationError("t must contain finite numeric values")
+        if term_count == 0:
+            return np.full(times.shape, self.mean, dtype=np.float64)
+        indices = self._order[: int(term_count)]
+        frequencies = self._frequencies[list(indices)]
+        amplitudes = self._amplitudes[list(indices)]
+        phases = self._phases[list(indices)]
+        angles = 2 * np.pi * times[..., None] * frequencies + phases
+        return self.mean + np.sum(amplitudes * np.cos(angles), axis=-1)
+
+    def reconstruct(self, term_count: int) -> np.ndarray:
+        """Reconstruct the original sample times with a partial harmonic sum."""
+        if (
+            isinstance(term_count, bool)
+            or not isinstance(term_count, Integral)
+            or not 0 <= term_count <= self.term_count
+        ):
+            raise FourierValidationError(
+                f"term_count must be an integer between 0 and {self.term_count}"
+            )
+        return self.evaluate(np.arange(self.sample_count) / self.sample_count, int(term_count))
+
+    def rms_error(self, term_count: int) -> float:
+        difference = self._samples - self.reconstruct(term_count)
+        return float(np.sqrt(np.mean(difference**2)))
+
+    def rms_errors(self) -> np.ndarray:
+        """Return the RMS errors for term counts zero through full precision."""
+        ordered = self._energies[list(self._order)]
+        remaining = np.concatenate((np.cumsum(ordered[::-1])[::-1], [0.0]))
+        errors = np.sqrt(np.maximum(remaining, 0.0))
+        errors.setflags(write=False)
+        return errors
+

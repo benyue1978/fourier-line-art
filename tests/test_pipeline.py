@@ -27,12 +27,16 @@ def test_pipeline_solves_multiple_strokes_and_saves_renderer_neutral_npz(tmp_pat
     output = result.save_npz(tmp_path / "solution.npz")
     with np.load(output, allow_pickle=False) as saved:
         metadata = json.loads(str(saved["metadata_json"]))
-        assert metadata["schema_version"] == 1
+        assert metadata["schema_version"] == 2
         assert metadata["solver"] == result.solver_name
         assert saved["samples_xyz"].shape == (64, 3)
         assert saved["xy_coefficients"].shape == (64,)
         assert saved["height_coefficients"].shape == (64,)
         assert saved["draw_mask"].shape == (64,)
+        assert saved["x_amplitudes"].shape == (32,)
+        assert saved["y_amplitudes"].shape == (32,)
+        assert saved["x_rms_errors"].shape == (33,)
+        assert saved["y_rms_errors"].shape == (33,)
 
 
 def test_pipeline_uses_cpp_for_one_connected_drawing_component():
